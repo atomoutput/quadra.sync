@@ -30,7 +30,6 @@ async function initializeAudio(){
     }
   }
 
-
 function setKickPulse(bpm, subdivisionFactor, delayActive) {
       const beatDuration = 60000 / bpm;
       const interval = beatDuration * subdivisionFactor/1000; // Convert ms to seconds
@@ -41,7 +40,6 @@ function setKickPulse(bpm, subdivisionFactor, delayActive) {
       kickSource.buffer = kickBuffer; // kick sample
       kickSource.loop = true;
        kickSource.connect(kickGainNode);
-
 
       if (delayActive) {
          kickGainNode.connect(delayNode);
@@ -59,7 +57,6 @@ function setKickPulse(bpm, subdivisionFactor, delayActive) {
          kickSource = null; // Clear the kickSource when it has ended.
      };
 }
-
 
 function setDelay(subdivisionFactor){
      const beatDuration = 60000 / bpm;
