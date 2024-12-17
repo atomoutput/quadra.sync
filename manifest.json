@@ -1,0 +1,13 @@
+{
+    "name": "quadra.sync",
+    "short_name": "quadra.sync",
+    "description": "MIDI Sync, Kick Generator, and FX Control Tool",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "background_color": "#1E1E2E",
+    "theme_color": "#FF6F61",
+    "icons": [
+        { "src": "assets/icons/icon-192x192.png", "sizes": "192x192", "type": "image/png" },
+        { "src": "assets/icons/icon-512x512.png", "sizes": "512x512", "type": "image/png" }
+    ]
+}

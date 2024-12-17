@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>quadra.sync</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles/styles.css">
+</head>
+<body data-theme="dark">
+    <!-- Header -->
+    <header class="app-header">
+        <h1>quadra.sync</h1>
+        <button id="theme-toggle" aria-label="Toggle Theme"></button>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+        <!-- BPM Input Section -->
+        <section class="card">
+            <h2>BPM Input</h2>
+            <label for="bpm-input">BPM:</label>
+            <input type="number" id="bpm-input" placeholder="Enter BPM" min="30" max="300">
+            <button id="calculate-btn">Calculate Delay Times</button>
+            <table id="delay-table">
+                <thead>
+                    <tr><th>Subdivision</th><th>Delay (ms)</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </section>
+
+        <!-- MIDI Clock and Kick Section -->
+        <section class="card">
+            <h2>MIDI Clock & Kick Pulse</h2>
+            <button id="enable-midi-btn">Enable MIDI Sync</button>
+            <button id="start-kick-btn">Start Kick Pulse</button>
+            <button id="stop-kick-btn">Stop Kick Pulse</button>
+            <p id="midi-feedback">MIDI Status: Disabled</p>
+            <div id="metronome" class="metronome"></div>
+        </section>
+
+        <!-- SysEx Commands -->
+        <section class="card">
+            <h2>SysEx Commands</h2>
+            <label for="sysex-select">Subdivision:</label>
+            <select id="sysex-select">
+                <option value="0.5">1/8 Note</option>
+                <option value="1">1/4 Note</option>
+                <option value="1.5">Dotted 1/8</option>
+            </select>
+            <button id="send-sysex-btn">Send SysEx</button>
+            <p id="sysex-feedback">SysEx Status: Ready</p>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <p>&copy; 2024 quadra.sync</p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="scripts/app.js" defer></script>
+</body>
+</html>
