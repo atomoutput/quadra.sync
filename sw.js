@@ -1,85 +1,142 @@
 /* sw.js */
 
-const CACHE_NAME = 'quadra.calc-v1';
-const urlsToCache = [
-    './',
-    './index.html',
-    './styles/styles.css',
-    './scripts/app.js',
-    './scripts/midi.js',
-    './scripts/audio.js',
-    './scripts/sysex.js',
-    './manifest.json',
-    './assets/icons/icon-192x192.png',
-    './assets/icons/icon-512x512.png',
-    './assets/audio/kick.wav'
-    // Add any additional assets you want to cache
+const CACHE_NAME = 'quadraverb-calc-v1';
+const ASSETS = [
+    '/',
+    '/index.html',
+    '/styles/main.css',
+    '/scripts/main.js',
+    '/scripts/ui.js',
+    '/scripts/calculations.js',
+    '/scripts/presets.js',
+    '/scripts/midi.js',
+    '/scripts/audio.js',
+    '/scripts/sysex.js',
+    '/scripts/install.js',
+    '/scripts/help.js',
+    '/assets/audio/kick.wav',
+    '/assets/icons/icon-72x72.png',
+    '/assets/icons/icon-96x96.png',
+    '/assets/icons/icon-128x128.png',
+    '/assets/icons/icon-144x144.png',
+    '/assets/icons/icon-152x152.png',
+    '/assets/icons/icon-192x192.png',
+    '/assets/icons/icon-384x384.png',
+    '/assets/icons/icon-512x512.png',
+    'https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap'
 ];
 
-// Install the service worker and cache resources
-self.addEventListener('install', (event) => {
+// Install event - cache assets
+self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
-            .then((cache) => {
-                console.log('Opened cache');
-                return cache.addAll(urlsToCache);
+            .then(cache => {
+                console.log('Caching app assets');
+                return cache.addAll(ASSETS);
+            })
+            .catch(error => {
+                console.error('Error caching assets:', error);
             })
     );
 });
 
-// Cache and return requests
-self.addEventListener('fetch', (event) => {
+// Activate event - clean up old caches
+self.addEventListener('activate', event => {
+    event.waitUntil(
+        caches.keys()
+            .then(cacheNames => {
+                return Promise.all(
+                    cacheNames
+                        .filter(cacheName => cacheName !== CACHE_NAME)
+                        .map(cacheName => caches.delete(cacheName))
+                );
+            })
+            .then(() => {
+                console.log('Old caches removed');
+                // Claim any clients that match the scope
+                return self.clients.claim();
+            })
+    );
+});
+
+// Fetch event - serve from cache, fallback to network
+self.addEventListener('fetch', event => {
+    // Skip cross-origin requests
+    if (!event.request.url.startsWith(self.location.origin) && 
+        !event.request.url.startsWith('https://fonts.googleapis.com')) {
+        return;
+    }
+
     event.respondWith(
         caches.match(event.request)
-            .then((response) => {
-                // Cache hit - return response
+            .then(response => {
                 if (response) {
-                    return response;
+                    return response; // Return cached version
                 }
-                // IMPORTANT: Clone the request. A request is a stream and
-                // can only be consumed once. Since we are consuming this
-                // once by cache and once by the browser for fetch, we need
-                // to clone it.
+
+                // Clone the request because it's a one-time use stream
                 const fetchRequest = event.request.clone();
 
-                return fetch(fetchRequest).then(
-                    (response) => {
-                        // Check if we received a valid response
+                return fetch(fetchRequest)
+                    .then(response => {
+                        // Check if valid response
                         if (!response || response.status !== 200 || response.type !== 'basic') {
                             return response;
                         }
 
-                        // IMPORTANT: Clone the response. A response is a stream
-                        // and because we want the browser to consume the response
-                        // as well as the cache consuming the response, we need
-                        // to clone it so we have two streams.
+                        // Clone the response because it's a one-time use stream
                         const responseToCache = response.clone();
 
                         caches.open(CACHE_NAME)
-                            .then((cache) => {
+                            .then(cache => {
                                 cache.put(event.request, responseToCache);
                             });
 
                         return response;
-                    }
-                );
+                    })
+                    .catch(error => {
+                        console.error('Fetch failed:', error);
+                        // You could return a custom offline page here
+                    });
             })
     );
 });
 
-// Update the service worker
-self.addEventListener('activate', (event) => {
-    const cacheWhitelist = [CACHE_NAME];
+// Handle push notifications
+self.addEventListener('push', event => {
+    const options = {
+        body: event.data.text(),
+        icon: '/assets/icons/icon-192x192.png',
+        badge: '/assets/icons/icon-72x72.png',
+        vibrate: [100, 50, 100],
+        data: {
+            dateOfArrival: Date.now(),
+            primaryKey: 1
+        },
+        actions: [
+            {
+                action: 'explore',
+                title: 'Open App'
+            },
+            {
+                action: 'close',
+                title: 'Close'
+            }
+        ]
+    };
+
     event.waitUntil(
-        caches.keys().then((cacheNames) => {
-            return Promise.all(
-                cacheNames.map((cacheName) => {
-                    if (!cacheWhitelist.includes(cacheName)) {
-                        console.log('Deleting old cache:', cacheName);
-                        return caches.delete(cacheName);
-                    }
-                })
-            );
-        })
+        self.registration.showNotification('Quadraverb Calculator', options)
     );
+});
+
+// Handle notification clicks
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+
+    if (event.action === 'explore') {
+        event.waitUntil(
+            clients.openWindow('/')
+        );
+    }
 });

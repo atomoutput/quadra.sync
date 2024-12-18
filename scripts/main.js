@@ -1,221 +1,319 @@
 /* scripts/main.js */
 
-import * as ui from './ui.js';
-import * as calculations from './calculations.js';
-import * as presets from './presets.js';
-import * as midi from './midi.js';
-import * as audio from './audio.js';
-import * as sysex from './sysex.js';
-import * as install from './install.js';
-import * as help from './help.js';
+import { calculator } from './calculations.js';
+import { initializeUI, UI } from './ui.js';
+import { initializePresets, PresetManager } from './presets.js';
+import { initializeMIDI, MIDIManager } from './midi.js';
+import { initializeAudio, AudioManager } from './audio.js';
+import { initializeSysex, SysexManager } from './sysex.js';
+import { initializeInstall } from './install.js';
+import { initializeHelp } from './help.js';
+import { animations } from './animations.js';
 
-// State management
-const state = {
-    bpm: 120,
-    selectedMidiInput: null,
-    selectedMidiOutput: null,
-    customSubdivisions: [],
-    eventListeners: new Map(),
-};
+// Application State
+class AppState {
+    constructor() {
+        this.bpm = 120;
+        this.midiInput = null;
+        this.midiOutput = null;
+        this.isConnected = false;
+        this.isPlaying = false;
+        this.selectedSubdivision = null;
+        this.listeners = new Set();
+        this.theme = 'light';
+    }
 
-// DOM Elements for Event Listeners
-const elements = {
-    calculateBtn: document.getElementById('calculate-btn'),
-    bpmInput: document.getElementById('bpm-input'),
-    midiInputSelect: document.getElementById('midi-input-select'),
-    startMidiBtn: document.getElementById('start-midi-btn'),
-    midiOutputSelect: document.getElementById('midi-output-select'),
-    sendSysexBtn: document.getElementById('send-sysex-btn'),
-    sysexParameterSelect: document.getElementById('sysex-parameter-select'),
-    sysexParameterValue: document.getElementById('sysex-parameter-value'),
-    sendSysexParameterBtn: document.getElementById('send-sysex-parameter-btn'),
-    subdivisionNameInput: document.getElementById('subdivision-name'),
-    subdivisionFactorInput: document.getElementById('subdivision-factor'),
-    addSubdivisionBtn: document.getElementById('add-subdivision-btn'),
-    presetNameInput: document.getElementById('preset-name'),
-    savePresetBtn: document.getElementById('save-preset-btn'),
-    kickSubdivisionSelect: document.getElementById('kick-subdivision-select'),
-    presetsTable: document.getElementById('presets-table').querySelector('tbody'),
-};
+    update(changes) {
+        const oldState = { ...this };
+        Object.assign(this, changes);
+        this.notifyListeners(oldState);
+    }
 
-// Validate all required DOM elements
-function validateElements() {
-    for (const [key, element] of Object.entries(elements)) {
-        if (!element) {
-            throw new Error(`Required DOM element not found: ${key}`);
-        }
+    subscribe(listener) {
+        this.listeners.add(listener);
+        return () => this.listeners.delete(listener);
+    }
+
+    notifyListeners(oldState) {
+        this.listeners.forEach(listener => listener(this, oldState));
     }
 }
 
-// Add event listener with automatic cleanup registration
-function addEventListenerWithCleanup(element, event, handler) {
-    element.addEventListener(event, handler);
-    const listeners = state.eventListeners.get(element) || new Set();
-    listeners.add({ event, handler });
-    state.eventListeners.set(element, listeners);
-}
+// Application Controller
+class App {
+    constructor() {
+        this.state = new AppState();
+        this.ui = null;
+        this.midi = null;
+        this.audio = null;
+        this.sysex = null;
+        this.presets = null;
+        this.lastSentDelayTime = null;
+        this.delayUpdateThreshold = 5; // ms threshold for delay time updates
+    }
 
-// Clean up event listeners
-function cleanupEventListeners() {
-    for (const [element, listeners] of state.eventListeners) {
-        listeners.forEach(({ event, handler }) => {
-            element.removeEventListener(event, handler);
+    async initialize() {
+        try {
+            // Initialize UI first
+            this.ui = await initializeUI();
+            animations.showNotification('Initializing application...');
+
+            // Initialize core modules
+            this.midi = await initializeMIDI();
+            this.audio = await initializeAudio();
+            this.sysex = await initializeSysex();
+            this.presets = await initializePresets();
+
+            // Initialize optional modules
+            await initializeInstall();
+            await initializeHelp();
+
+            // Set up event handling
+            this.setupEventHandling();
+
+            // Initialize MIDI devices
+            await this.initializeMIDIDevices();
+
+            // Start BPM visualization
+            animations.updateBPMVisualization(this.state.bpm);
+
+            animations.showNotification('Application initialized successfully!', 'success');
+        } catch (error) {
+            console.error('Initialization error:', error);
+            animations.showNotification('Failed to initialize: ' + error.message, 'error');
+        }
+    }
+
+    setupEventHandling() {
+        // BPM and calculations
+        this.ui.on('calculateBPM', this.handleCalculate.bind(this));
+        this.ui.on('tapTempo', this.handleTapTempo.bind(this));
+        
+        // MIDI and Sysex
+        this.ui.on('midiInputChange', this.handleMIDIInputChange.bind(this));
+        this.ui.on('midiOutputChange', this.handleMIDIOutputChange.bind(this));
+        this.midi.on('bpmChange', this.handleMIDIClockBPM.bind(this));
+        
+        // Presets and subdivisions
+        this.ui.on('savePreset', this.handleSavePreset.bind(this));
+        this.ui.on('loadPreset', this.handleLoadPreset.bind(this));
+        this.ui.on('deletePreset', this.handleDeletePreset.bind(this));
+        this.ui.on('addSubdivision', this.handleAddSubdivision.bind(this));
+        this.ui.on('removeSubdivision', this.handleRemoveSubdivision.bind(this));
+        this.ui.on('selectSubdivision', this.handleSubdivisionSelect.bind(this));
+
+        // Theme toggle
+        const themeToggle = document.querySelector('.theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                const newTheme = this.state.theme === 'light' ? 'dark' : 'light';
+                this.state.update({ theme: newTheme });
+                document.body.dataset.theme = newTheme;
+                animations.showNotification(`Switched to ${newTheme} theme`);
+            });
+        }
+
+        // Subscribe to state changes
+        this.state.subscribe((newState, oldState) => {
+            // Update connection status indicator
+            if (newState.isConnected !== oldState.isConnected) {
+                const statusDot = document.querySelector('.status-dot');
+                if (statusDot) {
+                    statusDot.classList.toggle('connected', newState.isConnected);
+                    if (newState.isConnected) {
+                        animations.pulseStatusDot(statusDot);
+                    }
+                }
+            }
+
+            // Update BPM visualization
+            if (newState.bpm !== oldState.bpm) {
+                animations.updateBPMVisualization(newState.bpm);
+            }
         });
     }
-    state.eventListeners.clear();
-}
 
-// Event Handlers
-const handleCalculate = () => {
-    try {
-        const bpm = parseInt(elements.bpmInput.value);
-        if (isNaN(bpm) || bpm <= 0) {
-            throw new Error('Please enter a valid BPM.');
+    async initializeMIDIDevices() {
+        try {
+            const { inputs, outputs } = await this.midi.getDevices();
+            this.ui.updateMIDIDevices(inputs, outputs);
+        } catch (error) {
+            console.error('MIDI initialization error:', error);
+            animations.showNotification('Failed to initialize MIDI devices', 'error');
         }
-        state.bpm = bpm;
-        const delayTimes = calculations.calculateDelayTimes(bpm);
-        ui.populateSuggestionsTable(delayTimes);
-        ui.showNotification('Delay times calculated successfully!');
-    } catch (error) {
-        ui.showNotification(error.message, 'error');
-        console.error('Calculation error:', error);
     }
-};
 
-const handleSysex = async () => {
-    try {
-        const selectedMidiOutputId = elements.midiOutputSelect.value;
-        if (!selectedMidiOutputId) {
-            throw new Error('Please select MIDI output device!');
+    // Event Handlers
+    async handleCalculate(bpm) {
+        try {
+            const bpmInput = document.getElementById('bpm-input');
+            animations.showLoadingState(bpmInput, true);
+
+            const delayTimes = calculator.calculateAllDelayTimes(bpm);
+            this.state.update({ bpm });
+            
+            // Update UI with animation
+            const delayGrid = document.getElementById('delay-grid');
+            if (delayGrid) {
+                delayGrid.innerHTML = ''; // Clear existing cards
+                delayTimes.forEach(delay => {
+                    const card = this.ui.createDelayTimeCard(delay);
+                    delayGrid.appendChild(card);
+                    animations.animateDelayTimeCard(card);
+                });
+            }
+
+            animations.showLoadingState(bpmInput, false);
+            animations.showNotification('Delay times calculated successfully!');
+        } catch (error) {
+            animations.showNotification(error.message, 'error');
         }
-
-        await sysex.connectToQuadraverb(selectedMidiOutputId);
-        const subdivision = parseFloat(elements.kickSubdivisionSelect.value);
-        const delayMs = (60000 / state.bpm) * subdivision;
-        
-        await sysex.sendSysexMessage('leftDelay', delayMs);
-        ui.updateSysexProgress(true);
-        ui.showNotification('Sysex message sent!');
-        
-        setTimeout(() => {
-            ui.updateSysexProgress(false);
-        }, 1000);
-    } catch (error) {
-        ui.showNotification(error.message, 'error');
-        console.error('Sysex error:', error);
-        ui.updateSysexProgress(false);
     }
-};
 
-const handleSysexParameter = async () => {
-    try {
-        const selectedMidiOutputId = elements.midiOutputSelect.value;
-        if (!selectedMidiOutputId) {
-            throw new Error('Please select MIDI output device!');
+    async handleSysex(data) {
+        try {
+            const button = document.querySelector('.sysex-send-btn');
+            animations.showLoadingState(button, true);
+            
+            await this.sysex.sendMessage(data);
+            
+            animations.showLoadingState(button, false);
+            animations.showNotification('Sysex message sent successfully!');
+        } catch (error) {
+            animations.showNotification(error.message, 'error');
         }
-
-        await sysex.connectToQuadraverb(selectedMidiOutputId);
-        const parameter = elements.sysexParameterSelect.value;
-        const value = parseInt(elements.sysexParameterValue.value);
-        
-        if (isNaN(value)) {
-            throw new Error('Invalid parameter value');
-        }
-
-        await sysex.sendSysexMessage(parameter, value);
-        ui.updateSysexProgress(true);
-        ui.showNotification('Sysex parameter sent!');
-        
-        setTimeout(() => {
-            ui.updateSysexProgress(false);
-        }, 1000);
-    } catch (error) {
-        ui.showNotification(error.message, 'error');
-        console.error('Sysex parameter error:', error);
-        ui.updateSysexProgress(false);
     }
-};
 
-const handleAddSubdivision = () => {
-    try {
-        const name = elements.subdivisionNameInput.value.trim();
-        const factor = parseFloat(elements.subdivisionFactorInput.value);
-        
-        if (!name || isNaN(factor)) {
-            throw new Error('Invalid subdivision name or factor.');
-        }
-
-        calculations.addCustomSubdivision(name, factor);
-        ui.populateSuggestionsTable(calculations.calculateDelayTimes(state.bpm));
-        ui.showNotification('Subdivision added successfully!', 'success');
-        
-        elements.subdivisionNameInput.value = '';
-        elements.subdivisionFactorInput.value = '';
-    } catch (error) {
-        ui.showNotification(error.message, 'error');
-        console.error('Add subdivision error:', error);
-    }
-};
-
-// Initialize the application
-async function init() {
-    try {
-        validateElements();
-
-        // Initialize all modules
-        ui.init();
-        calculations.init();
-        presets.initializePresets();
-        install.init();
-        help.init();
-        await audio.initializeAudio();
-
-        // Set up event listeners
-        addEventListenerWithCleanup(elements.calculateBtn, 'click', handleCalculate);
-        addEventListenerWithCleanup(elements.sendSysexBtn, 'click', handleSysex);
-        addEventListenerWithCleanup(elements.sendSysexParameterBtn, 'click', handleSysexParameter);
-        addEventListenerWithCleanup(elements.addSubdivisionBtn, 'click', handleAddSubdivision);
-
-        // Initialize MIDI devices
-        const midiDevices = await midi.getMidiDevices();
-        if (!midiDevices.error) {
-            elements.midiInputSelect.innerHTML = '<option value="">No MIDI Input</option>';
-            midiDevices.forEach(device => {
-                const option = document.createElement('option');
-                option.value = device.id;
-                option.textContent = device.name;
-                elements.midiInputSelect.appendChild(option);
+    async handleMIDIInputChange(deviceId) {
+        try {
+            const select = document.getElementById('midi-input-select');
+            animations.showLoadingState(select, true);
+            
+            await this.midi.setInput(deviceId);
+            this.state.update({ 
+                midiInput: deviceId,
+                isConnected: !!deviceId
             });
+            
+            animations.showLoadingState(select, false);
+        } catch (error) {
+            animations.showNotification(error.message, 'error');
         }
+    }
 
-        const midiOutputs = await sysex.getMidiOutputs();
-        if (!midiOutputs.error) {
-            elements.midiOutputSelect.innerHTML = '<option value="">No MIDI Output</option>';
-            midiOutputs.forEach(device => {
-                const option = document.createElement('option');
-                option.value = device.id;
-                option.textContent = device.name;
-                elements.midiOutputSelect.appendChild(option);
+    async handleMIDIOutputChange(deviceId) {
+        try {
+            const select = document.getElementById('midi-output-select');
+            animations.showLoadingState(select, true);
+            
+            await this.midi.setOutput(deviceId);
+            this.state.update({ 
+                midiOutput: deviceId,
+                isConnected: !!deviceId
             });
+            
+            animations.showLoadingState(select, false);
+        } catch (error) {
+            animations.showNotification(error.message, 'error');
         }
+    }
 
-        updatePresetsTable();
-        ui.showNotification('Application initialized successfully!', 'success');
-    } catch (error) {
-        ui.showNotification('Failed to initialize application: ' + error.message, 'error');
-        console.error('Initialization error:', error);
+    handleAddSubdivision(name, factor) {
+        try {
+            calculator.addCustomSubdivision(name, factor);
+            const delayTimes = calculator.calculateAllDelayTimes(this.state.bpm);
+            
+            // Update UI with animation
+            const delayGrid = document.getElementById('delay-grid');
+            if (delayGrid) {
+                const card = this.ui.createDelayTimeCard({ name, factor });
+                delayGrid.appendChild(card);
+                animations.animateDelayTimeCard(card);
+            }
+            
+            animations.showNotification('Custom subdivision added successfully!');
+        } catch (error) {
+            animations.showNotification(error.message, 'error');
+        }
+    }
+
+    async handleMIDIClockBPM(bpm) {
+        try {
+            // Update state and UI with animation
+            this.state.update({ bpm });
+            const bpmInput = document.getElementById('bpm-input');
+            if (bpmInput) {
+                animations.showLoadingState(bpmInput, true);
+                bpmInput.value = bpm;
+                animations.showLoadingState(bpmInput, false);
+            }
+
+            // Calculate delay times if a subdivision is selected
+            if (this.state.selectedSubdivision) {
+                await this.updateDelayTime(bpm, this.state.selectedSubdivision);
+            }
+        } catch (error) {
+            animations.showNotification(error.message, 'error');
+        }
+    }
+
+    async updateDelayTime(bpm, subdivision) {
+        try {
+            // Calculate new delay time
+            const delayTime = calculator.calculateDelayTime(bpm, subdivision.factor);
+
+            // Check if the change is significant enough to send
+            if (!this.lastSentDelayTime || 
+                Math.abs(delayTime - this.lastSentDelayTime) > this.delayUpdateThreshold) {
+                
+                const button = document.querySelector('.delay-update-btn');
+                if (button) animations.showLoadingState(button, true);
+                
+                // Send to both left and right delay parameters
+                await this.sysex.sendMessage('leftDelay', delayTime);
+                await this.sysex.sendMessage('rightDelay', delayTime);
+                
+                if (button) animations.showLoadingState(button, false);
+                
+                this.lastSentDelayTime = delayTime;
+                animations.showNotification(`Delay time updated: ${delayTime}ms`);
+            }
+        } catch (error) {
+            animations.showNotification(error.message, 'error');
+        }
+    }
+
+    async handleSubdivisionSelect(subdivision) {
+        const cards = document.querySelectorAll('.delay-time-card');
+        cards.forEach(card => {
+            if (card.dataset.subdivision === subdivision.name) {
+                card.classList.add('selected');
+                animations.animateDelayTimeCard(card);
+            } else {
+                card.classList.remove('selected');
+            }
+        });
+
+        this.state.update({ selectedSubdivision: subdivision });
+        if (this.state.bpm) {
+            await this.updateDelayTime(this.state.bpm, subdivision);
+        }
+    }
+
+    cleanup() {
+        this.audio?.cleanup();
+        this.midi?.cleanup();
+        this.sysex?.cleanup();
+        this.ui?.cleanup();
     }
 }
 
-// Cleanup function
-function cleanup() {
-    cleanupEventListeners();
-    audio.cleanup?.(); // Call cleanup if it exists
-}
+// Create and initialize application
+const app = new App();
 
 // Initialize on load and set up cleanup
-window.addEventListener('load', init);
-window.addEventListener('unload', cleanup);
+window.addEventListener('load', () => app.initialize());
+window.addEventListener('unload', () => app.cleanup());
 
-// Export for testing
-export { state, init, cleanup };
+// Export for development
+export const DEBUG = { app, calculator };

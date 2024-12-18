@@ -1,280 +1,362 @@
 /* scripts/audio.js */
 
-import { showNotification } from './ui.js';
+import { EventEmitter } from './utils/eventEmitter.js';
 
-// Constants
-const DEFAULT_SAMPLE_PATH = './assets/audio/kick.wav';
-const MAX_DELAY_TIME = 5.0;
-const DEFAULT_GAIN = 0.8;
-const MIN_GAIN = 0;
-const MAX_GAIN = 1;
-
-// Audio Context and Nodes
-let audioContext = null;
-let kickBuffer = null;
-let activeNodes = new Set();
-
-// Audio Node References
-let nodes = {
-    kickSource: null,
-    delayNode: null,
-    kickGainNode: null,
-    delayGainNode: null,
-    feedbackGainNode: null
+// Audio Constants
+const AUDIO_CONSTANTS = {
+    PATHS: {
+        DEFAULT_SAMPLE: './assets/audio/kick.wav'
+    },
+    TIMING: {
+        MAX_DELAY_TIME: 5.0,
+        MIN_BPM: 20,
+        MAX_BPM: 300
+    },
+    GAIN: {
+        DEFAULT: 0.8,
+        MIN: 0,
+        MAX: 1
+    },
+    NODE_TYPES: {
+        GAIN: 'gain',
+        DELAY: 'delay',
+        SOURCE: 'source'
+    }
 };
 
-// State tracking
-let isInitialized = false;
-let isPlaying = false;
+// Audio Manager Class
+export class AudioManager extends EventEmitter {
+    constructor() {
+        super();
+        this.state = {
+            isInitialized: false,
+            isPlaying: false,
+            currentBPM: 120,
+            currentSubdivision: 1,
+            delayActive: false
+        };
 
-/**
- * Creates and configures an audio node with cleanup registration
- * @template T
- * @param {string} type - The type of audio node to create
- * @param {Object} [config] - Configuration options for the node
- * @returns {T} The created audio node
- */
-function createAudioNode(type, config = {}) {
-    if (!audioContext) {
-        throw new Error('Audio context not initialized');
+        this.context = null;
+        this.samples = new Map();
+        this.activeNodes = new Set();
+        this.nodes = {
+            source: null,
+            delay: null,
+            kickGain: null,
+            delayGain: null,
+            feedbackGain: null
+        };
     }
 
-    let node;
-    switch (type) {
-        case 'gain':
-            node = audioContext.createGain();
-            if (typeof config.gain === 'number') {
-                node.gain.value = Math.max(MIN_GAIN, Math.min(MAX_GAIN, config.gain));
-            }
-            break;
-        case 'delay':
-            node = audioContext.createDelay(config.maxDelayTime || MAX_DELAY_TIME);
-            if (typeof config.delayTime === 'number') {
-                node.delayTime.value = config.delayTime;
-            }
-            break;
-        default:
-            throw new Error(`Unsupported audio node type: ${type}`);
-    }
-
-    activeNodes.add(node);
-    return node;
-}
-
-/**
- * Safely disconnects and cleans up an audio node
- * @param {AudioNode} node - The audio node to clean up
- */
-function cleanupAudioNode(node) {
-    try {
-        if (node) {
-            node.disconnect();
-            activeNodes.delete(node);
-        }
-    } catch (error) {
-        console.error('Error cleaning up audio node:', error);
-    }
-}
-
-/**
- * Gets the audio context, creating it if necessary
- * @returns {AudioContext}
- */
-export function getAudioContext() {
-    if (!audioContext) {
+    // Initialization
+    async initialize() {
         try {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (this.state.isInitialized) {
+                return;
+            }
+
+            await this.initializeContext();
+            await this.loadDefaultSamples();
+            await this.createAudioGraph();
+
+            this.state.isInitialized = true;
+            this.emit('initialized');
+        } catch (error) {
+            console.error('Failed to initialize audio:', error);
+            this.emit('error', error);
+            await this.cleanup();
+            throw error;
+        }
+    }
+
+    async initializeContext() {
+        try {
+            this.context = new (window.AudioContext || window.webkitAudioContext)();
+            this.emit('contextCreated', this.context);
         } catch (error) {
             console.error('Failed to create AudioContext:', error);
-            showNotification('Failed to initialize audio system', 'error');
-            return null;
+            throw new Error('Failed to initialize audio system');
         }
     }
-    return audioContext;
-}
 
-/**
- * Initializes the audio system
- * @returns {Promise<void>}
- */
-export async function initializeAudio() {
-    try {
-        if (isInitialized) {
-            return;
+    async loadDefaultSamples() {
+        try {
+            const kickBuffer = await this.loadSample(AUDIO_CONSTANTS.PATHS.DEFAULT_SAMPLE);
+            this.samples.set('kick', kickBuffer);
+        } catch (error) {
+            console.error('Failed to load default samples:', error);
+            throw error;
         }
+    }
 
-        audioContext = getAudioContext();
-        if (!audioContext) {
-            throw new Error('Failed to create audio context');
-        }
-
-        // Load kick sample
-        const response = await fetch(DEFAULT_SAMPLE_PATH);
+    async loadSample(url) {
+        const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`Failed to load audio sample: ${response.statusText}`);
         }
 
         const arrayBuffer = await response.arrayBuffer();
-        kickBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-        // Create audio nodes
-        nodes.delayNode = createAudioNode('delay', { maxDelayTime: MAX_DELAY_TIME });
-        nodes.kickGainNode = createAudioNode('gain', { gain: DEFAULT_GAIN });
-        nodes.delayGainNode = createAudioNode('gain', { gain: DEFAULT_GAIN });
-        nodes.feedbackGainNode = createAudioNode('gain', { gain: MIN_GAIN });
-
-        isInitialized = true;
-        showNotification('Audio system initialized successfully');
-    } catch (error) {
-        console.error('Error initializing audio:', error);
-        showNotification(`Failed to initialize audio: ${error.message}`, 'error');
-        cleanup();
-        throw error;
+        return await this.context.decodeAudioData(arrayBuffer);
     }
-}
 
-/**
- * Sets up and starts the kick pulse with delay
- * @param {number} bpm - Beats per minute
- * @param {number} subdivisionFactor - The subdivision factor for timing
- * @param {boolean} delayActive - Whether delay effect is active
- */
-export function setKickPulse(bpm, subdivisionFactor, delayActive) {
-    try {
-        if (!isInitialized || !audioContext || !kickBuffer) {
-            throw new Error('Audio system not properly initialized');
+    // Audio Graph Management
+    async createAudioGraph() {
+        // Create nodes
+        this.nodes.delay = this.createAudioNode(AUDIO_CONSTANTS.NODE_TYPES.DELAY, {
+            maxDelayTime: AUDIO_CONSTANTS.TIMING.MAX_DELAY_TIME
+        });
+
+        this.nodes.kickGain = this.createAudioNode(AUDIO_CONSTANTS.NODE_TYPES.GAIN, {
+            gain: AUDIO_CONSTANTS.GAIN.DEFAULT
+        });
+
+        this.nodes.delayGain = this.createAudioNode(AUDIO_CONSTANTS.NODE_TYPES.GAIN, {
+            gain: AUDIO_CONSTANTS.GAIN.DEFAULT
+        });
+
+        this.nodes.feedbackGain = this.createAudioNode(AUDIO_CONSTANTS.NODE_TYPES.GAIN, {
+            gain: AUDIO_CONSTANTS.GAIN.MIN
+        });
+
+        this.emit('graphCreated', this.nodes);
+    }
+
+    createAudioNode(type, config = {}) {
+        if (!this.context) {
+            throw new Error('Audio context not initialized');
         }
 
-        if (isPlaying) {
-            stopKickPulse();
+        let node;
+        switch (type) {
+            case AUDIO_CONSTANTS.NODE_TYPES.GAIN:
+                node = this.context.createGain();
+                if (typeof config.gain === 'number') {
+                    node.gain.value = this.clampGain(config.gain);
+                }
+                break;
+
+            case AUDIO_CONSTANTS.NODE_TYPES.DELAY:
+                node = this.context.createDelay(config.maxDelayTime || AUDIO_CONSTANTS.TIMING.MAX_DELAY_TIME);
+                if (typeof config.delayTime === 'number') {
+                    node.delayTime.value = config.delayTime;
+                }
+                break;
+
+            default:
+                throw new Error(`Unsupported audio node type: ${type}`);
         }
 
-        const beatDuration = 60000 / bpm;
-        const interval = beatDuration * subdivisionFactor / 1000; // Convert ms to seconds
-        const delayTime = interval;
+        this.activeNodes.add(node);
+        return node;
+    }
 
-        // Create and configure source node
-        nodes.kickSource = audioContext.createBufferSource();
-        nodes.kickSource.buffer = kickBuffer;
-        nodes.kickSource.loop = true;
+    // Playback Control
+    async setKickPulse(bpm, subdivisionFactor, delayActive = false) {
+        try {
+            this.validatePlaybackParameters(bpm, subdivisionFactor);
 
-        // Configure delay time
-        nodes.delayNode.delayTime.value = delayTime;
+            if (this.state.isPlaying) {
+                await this.stopKickPulse();
+            }
 
-        // Connect nodes
-        nodes.kickSource.connect(nodes.kickGainNode);
+            const beatDuration = 60000 / bpm;
+            const interval = (beatDuration * subdivisionFactor) / 1000; // Convert to seconds
+
+            // Create and configure source
+            this.nodes.source = this.context.createBufferSource();
+            this.nodes.source.buffer = this.samples.get('kick');
+            this.nodes.source.loop = true;
+
+            // Configure delay
+            this.nodes.delay.delayTime.value = interval;
+
+            // Connect nodes
+            this.connectNodes(delayActive);
+
+            // Start playback
+            this.nodes.source.start(0);
+            this.state.isPlaying = true;
+            this.state.currentBPM = bpm;
+            this.state.currentSubdivision = subdivisionFactor;
+            this.state.delayActive = delayActive;
+
+            // Set up cleanup
+            this.nodes.source.onended = () => this.handleSourceEnded();
+
+            this.emit('playbackStarted', {
+                bpm,
+                subdivisionFactor,
+                delayActive
+            });
+        } catch (error) {
+            console.error('Error setting kick pulse:', error);
+            this.emit('error', error);
+            await this.stopKickPulse();
+            throw error;
+        }
+    }
+
+    connectNodes(delayActive) {
+        // Reset all connections
+        this.disconnectNodes();
+
+        // Basic connection
+        this.nodes.source.connect(this.nodes.kickGain);
 
         if (delayActive) {
-            nodes.kickGainNode.connect(nodes.delayNode);
-            nodes.delayNode.connect(nodes.feedbackGainNode);
-            nodes.feedbackGainNode.connect(nodes.delayGainNode);
-            nodes.delayGainNode.connect(audioContext.destination);
-            nodes.feedbackGainNode.connect(nodes.delayNode);
+            // Delay path
+            this.nodes.kickGain.connect(this.nodes.delay);
+            this.nodes.delay.connect(this.nodes.feedbackGain);
+            this.nodes.feedbackGain.connect(this.nodes.delayGain);
+            this.nodes.delayGain.connect(this.context.destination);
+            this.nodes.feedbackGain.connect(this.nodes.delay);
         } else {
-            nodes.kickGainNode.connect(audioContext.destination);
+            // Direct path
+            this.nodes.kickGain.connect(this.context.destination);
+        }
+    }
+
+    disconnectNodes() {
+        Object.values(this.nodes).forEach(node => {
+            if (node) {
+                try {
+                    node.disconnect();
+                } catch (error) {
+                    // Ignore disconnection errors
+                }
+            }
+        });
+    }
+
+    async stopKickPulse() {
+        if (this.nodes.source) {
+            this.nodes.source.stop();
+            this.cleanupAudioNode(this.nodes.source);
+            this.nodes.source = null;
         }
 
-        // Start playback
-        nodes.kickSource.start(0);
-        isPlaying = true;
-
-        // Set up cleanup when source ends
-        nodes.kickSource.onended = () => {
-            cleanupAudioNode(nodes.kickSource);
-            nodes.kickSource = null;
-            isPlaying = false;
-        };
-    } catch (error) {
-        console.error('Error setting kick pulse:', error);
-        showNotification(`Failed to set kick pulse: ${error.message}`, 'error');
-        stopKickPulse();
+        this.state.isPlaying = false;
+        this.emit('playbackStopped');
     }
-}
 
-/**
- * Stops the current kick pulse
- */
-export function stopKickPulse() {
-    try {
-        if (nodes.kickSource) {
-            nodes.kickSource.stop();
-            cleanupAudioNode(nodes.kickSource);
-            nodes.kickSource = null;
-        }
-        isPlaying = false;
-    } catch (error) {
-        console.error('Error stopping kick pulse:', error);
-    }
-}
+    // Parameter Control
+    setGain(nodeType, value) {
+        const gainValue = this.clampGain(value);
+        let node;
 
-/**
- * Sets the gain value for a specific audio node
- * @param {string} nodeType - The type of node to adjust ('kick', 'delay', or 'feedback')
- * @param {number} value - The gain value to set (0-1)
- */
-export function setGain(nodeType, value) {
-    try {
-        const gainValue = Math.max(MIN_GAIN, Math.min(MAX_GAIN, value));
         switch (nodeType) {
             case 'kick':
-                nodes.kickGainNode.gain.value = gainValue;
+                node = this.nodes.kickGain;
                 break;
             case 'delay':
-                nodes.delayGainNode.gain.value = gainValue;
+                node = this.nodes.delayGain;
                 break;
             case 'feedback':
-                nodes.feedbackGainNode.gain.value = gainValue;
+                node = this.nodes.feedbackGain;
                 break;
             default:
                 throw new Error(`Invalid node type: ${nodeType}`);
         }
-    } catch (error) {
-        console.error('Error setting gain:', error);
-        showNotification(`Failed to set ${nodeType} gain`, 'error');
+
+        if (node) {
+            node.gain.value = gainValue;
+            this.emit('gainChanged', { nodeType, value: gainValue });
+        }
+    }
+
+    // Utility Methods
+    validatePlaybackParameters(bpm, subdivisionFactor) {
+        if (!this.state.isInitialized || !this.context || !this.samples.get('kick')) {
+            throw new Error('Audio system not properly initialized');
+        }
+
+        if (bpm < AUDIO_CONSTANTS.TIMING.MIN_BPM || bpm > AUDIO_CONSTANTS.TIMING.MAX_BPM) {
+            throw new Error(`BPM must be between ${AUDIO_CONSTANTS.TIMING.MIN_BPM} and ${AUDIO_CONSTANTS.TIMING.MAX_BPM}`);
+        }
+
+        if (subdivisionFactor <= 0) {
+            throw new Error('Subdivision factor must be positive');
+        }
+    }
+
+    clampGain(value) {
+        return Math.max(AUDIO_CONSTANTS.GAIN.MIN, 
+                       Math.min(AUDIO_CONSTANTS.GAIN.MAX, value));
+    }
+
+    handleSourceEnded() {
+        this.cleanupAudioNode(this.nodes.source);
+        this.nodes.source = null;
+        this.state.isPlaying = false;
+        this.emit('sourceEnded');
+    }
+
+    cleanupAudioNode(node) {
+        try {
+            if (node) {
+                node.disconnect();
+                this.activeNodes.delete(node);
+            }
+        } catch (error) {
+            console.error('Error cleaning up audio node:', error);
+        }
+    }
+
+    // Cleanup
+    async cleanup() {
+        try {
+            await this.stopKickPulse();
+
+            // Clean up all active nodes
+            for (const node of this.activeNodes) {
+                this.cleanupAudioNode(node);
+            }
+            this.activeNodes.clear();
+
+            // Reset node references
+            Object.keys(this.nodes).forEach(key => {
+                this.nodes[key] = null;
+            });
+
+            // Clear samples
+            this.samples.clear();
+
+            // Reset state
+            this.state.isInitialized = false;
+            this.state.isPlaying = false;
+
+            // Close context
+            if (this.context?.state !== 'closed') {
+                await this.context?.close();
+            }
+            this.context = null;
+
+            this.emit('cleanup');
+        } catch (error) {
+            console.error('Error during cleanup:', error);
+            this.emit('error', error);
+        }
+    }
+
+    // State Getters
+    getState() {
+        return { ...this.state };
+    }
+
+    isInitialized() {
+        return this.state.isInitialized;
+    }
+
+    isPlaying() {
+        return this.state.isPlaying;
     }
 }
 
-/**
- * Cleans up audio resources
- */
-export function cleanup() {
-    try {
-        stopKickPulse();
+// Create and export Audio instance
+export const audio = new AudioManager();
 
-        // Clean up all active nodes
-        for (const node of activeNodes) {
-            cleanupAudioNode(node);
-        }
-        activeNodes.clear();
-
-        // Reset node references
-        nodes = {
-            kickSource: null,
-            delayNode: null,
-            kickGainNode: null,
-            delayGainNode: null,
-            feedbackGainNode: null
-        };
-
-        // Close audio context
-        if (audioContext) {
-            audioContext.close();
-            audioContext = null;
-        }
-
-        isInitialized = false;
-        isPlaying = false;
-    } catch (error) {
-        console.error('Error during audio cleanup:', error);
-    }
+// Initialize Audio
+export async function initializeAudio() {
+    await audio.initialize();
+    return audio;
 }
-
-// Export additional functions for testing
-export const __testing = {
-    createAudioNode,
-    cleanupAudioNode,
-    getNodes: () => nodes,
-    getActiveNodes: () => activeNodes,
-    isInitialized: () => isInitialized,
-    isPlaying: () => isPlaying
-};

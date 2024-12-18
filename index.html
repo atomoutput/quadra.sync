@@ -1,328 +1,196 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <!-- Meta Tags -->
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="quadra.calc - A delay calculator and configuration tool inspired by the Alesis Quadraverb.">
-    <meta name="keywords" content="quadraverb, delay, calculator, midi, audio, effects, Alesis, music, production">
-    <meta name="author" content="Your Name">
-
-    <title>quadra.calc</title>
-
-    <!-- Preconnect for Google Fonts -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#6A5ACD">
+    <meta name="description" content="quadra.sync - Modern MIDI Delay Calculator for Alesis Quadraverb">
+    <title>quadra.sync</title>
+    
+    <!-- PWA Support -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="assets/icons/icon-192x192.png">
+    
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-    <!-- Asynchronously Load Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <noscript>
-        <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-    </noscript>
-
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json">
-
-    <!-- Favicon -->
-    <link rel="icon" href="assets/icons/icon-192x192.png" sizes="192x192" type="image/png">
-    <link rel="apple-touch-icon" href="assets/icons/icon-512x512.png">
-
-    <!-- Meta Tags for PWA -->
-    <meta name="theme-color" content="#6A5ACD">
-
-    <!-- Link to CSS -->
-    <link rel="stylesheet" href="styles/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles/main.css">
 </head>
-<body data-theme="dark">
-    <header class="app-header">
-        <div class="logo-container">
-            <svg id="logo" xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 100 100">
-                <path d="M40 30 L40 70 C40 80, 60 80, 60 70 C60 60, 80 60, 80 70" fill="none" stroke="var(--accent-color)" stroke-width="5" stroke-linecap="round"/>
-                <circle cx="70" cy="70" r="5" fill="var(--secondary-accent-color)"/>
-            </svg>
-            <div class="logo-text">
-                <span>quadra.calc</span>
+<body>
+    <!-- App Container -->
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-container">
+                <div class="logo-animation">
+                    <div class="logo-circle"></div>
+                    <div class="logo-wave"></div>
+                </div>
+                <h1 class="logo-text">quadra.sync</h1>
+            </div>
+            <div class="header-controls">
+                <button id="theme-toggle" class="icon-button" aria-label="Toggle theme">
+                    <svg class="icon" viewBox="0 0 24 24"></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- BPM Section -->
+            <section class="card card--primary">
+                <div class="card-content">
+                    <h2 class="section-title">BPM Control</h2>
+                    <div class="bpm-controls">
+                        <div class="input-group">
+                            <label for="bpm-input" class="label">BPM</label>
+                            <div class="input-with-button">
+                                <input type="number" 
+                                       id="bpm-input" 
+                                       class="input input--large" 
+                                       placeholder="120" 
+                                       min="20" 
+                                       max="300"
+                                       aria-label="Enter BPM value">
+                                <button id="tap-btn" class="button button--accent">
+                                    <span class="pulse-dot"></span>
+                                    Tap
+                                </button>
+                            </div>
+                        </div>
+                        <div class="bpm-visualization">
+                            <div class="tempo-indicator">
+                                <div class="tempo-dot"></div>
+                            </div>
+                            <div id="tap-feedback" class="feedback-text"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Delay Times Section -->
+            <section class="card card--secondary">
+                <div class="card-content">
+                    <h2 class="section-title">Delay Times</h2>
+                    <div class="delay-times">
+                        <div class="delay-grid" id="delay-grid">
+                            <!-- Delay time cards will be inserted here -->
+                        </div>
+                        <button id="copy-btn" class="button button--outline">
+                            <svg class="icon" viewBox="0 0 24 24">
+                                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                            </svg>
+                            Copy Values
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MIDI Section -->
+            <section class="card card--accent">
+                <div class="card-content">
+                    <h2 class="section-title">MIDI Control</h2>
+                    <div class="midi-controls">
+                        <div class="input-group">
+                            <label for="midi-input-select" class="label">MIDI Input</label>
+                            <select id="midi-input-select" class="select">
+                                <option value="">No MIDI Input</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <label for="midi-output-select" class="label">MIDI Output</label>
+                            <select id="midi-output-select" class="select">
+                                <option value="">No MIDI Output</option>
+                            </select>
+                        </div>
+                        <div class="midi-status">
+                            <div class="status-indicator">
+                                <div class="status-dot"></div>
+                                <span class="status-text">Not Connected</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Custom Subdivision Section -->
+            <section class="card card--gradient">
+                <div class="card-content">
+                    <h2 class="section-title">Custom Subdivision</h2>
+                    <div class="subdivision-controls">
+                        <div class="input-group">
+                            <label for="subdivision-name" class="label">Name</label>
+                            <input type="text" 
+                                   id="subdivision-name" 
+                                   class="input" 
+                                   placeholder="e.g., Dotted Quarter">
+                        </div>
+                        <div class="input-group">
+                            <label for="subdivision-factor" class="label">Factor</label>
+                            <input type="number" 
+                                   id="subdivision-factor" 
+                                   class="input" 
+                                   placeholder="e.g., 1.5" 
+                                   step="0.0001">
+                        </div>
+                        <button id="add-subdivision-btn" class="button button--gradient">
+                            Add Subdivision
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Presets Section -->
+            <section class="card card--glass">
+                <div class="card-content">
+                    <h2 class="section-title">Presets</h2>
+                    <div class="presets-controls">
+                        <div class="input-group">
+                            <label for="preset-name" class="label">Preset Name</label>
+                            <div class="input-with-button">
+                                <input type="text" 
+                                       id="preset-name" 
+                                       class="input" 
+                                       placeholder="Enter preset name">
+                                <button id="save-preset-btn" class="button button--success">Save</button>
+                            </div>
+                        </div>
+                        <div class="presets-list" id="presets-list">
+                            <!-- Preset cards will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <button id="install-btn" class="button button--outline" style="display: none;">
+                Install App
+            </button>
+            <button id="help-btn" class="button button--text">
+                Help
+            </button>
+        </footer>
+    </div>
+
+    <!-- Help Modal -->
+    <div id="help-modal" class="modal" aria-hidden="true">
+        <div class="modal-content">
+            <button id="close-help-modal" class="modal-close" aria-label="Close help">×</button>
+            <div class="modal-body">
+                <!-- Help content will be dynamically loaded -->
             </div>
         </div>
-        <div class="header-actions">
-          <button class="theme-toggle" id="theme-toggle" aria-label="Toggle Theme">
-            <svg id="theme-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path id="moon-icon" d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z" fill="currentColor"/>
-                <path id="sun-icon" d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.8 1.8 1.41-1.42zM10.27 2.05l-1.8 1.8 1.41 1.41 1.8-1.8-1.41-1.41zM12 5a7 7 0 000 14 7 7 0 000-14zm0 12a5 5 0 110-10 5 5 0 010 10zm6.24 1.16l1.79 1.8 1.41-1.41-1.8-1.8-1.41 1.41zM17.16 19.16l1.8 1.8 1.41-1.41-1.8-1.8-1.41 1.41zM12 19a7 7 0 007-7h-2a5 5 0 01-5 5v2z" fill="currentColor" style="display: none;"/>
-            </svg>
-          </button>
-          <button class="theme-toggle" id="help-btn" aria-label="Open Help">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M12 0C5.37258 0 0 5.37258 0 12C0 18.6274 5.37258 24 12 24C18.6274 24 24 18.6274 24 12C24 5.37258 18.6274 0 12 0ZM12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 5C10.3431 5 9 6.34315 9 8H11C11 7.44772 11.4477 7 12 7C12.5523 7 13 7.44772 13 8C13 9.65685 14.3431 11 16 11V13C14.3431 13 13 14.3431 13 16H11C11 14.3431 9.65685 13 8 13V11C9.65685 11 11 9.65685 11 8H9C9 6.34315 10.3431 5 12 5ZM13 18H11V15H13V18Z" fill="currentColor"/>
-            </svg>
-          </button>
-        </div>
-    </header>
+    </div>
 
-    <main class="main-grid">
-        <section class="section card midi-input-card" aria-labelledby="midi-input-section">
-            <h2 id="midi-input-section">MIDI Clock Input</h2>
-            <div class="input-group">
-                <label for="midi-input-select">MIDI Input Device:</label>
-                <select id="midi-input-select" aria-label="Select MIDI Input Device">
-                    <option value="">No MIDI Input</option>
-                </select>
-            </div>
-            <button id="start-midi-btn" class="regular-btn" aria-label="Start MIDI Clock">
-            <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 0.71-.71zM12 15l-3.81-3 3.81-3V15z" />
-            </svg>
-                Start
-            </button>
-            <div class="midi-indicator">
-                <div class="midi-progress" id="midi-progress"></div>
-            </div>
-        </section>
+    <!-- Notification -->
+    <div id="notification" class="notification" aria-live="polite"></div>
 
-        <section class="section card bpm-input-card" aria-labelledby="bpm-section">
-            <h2 id="bpm-section">BPM Input</h2>
-            <div class="input-group">
-                <label for="bpm-input">BPM:</label>
-                <input type="number" id="bpm-input" placeholder="Enter BPM" min="30" max="300" aria-required="true">
-            </div>
-            <button id="calculate-btn" class="regular-btn" aria-label="Calculate Delay Times">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14h2V5h14V3zm-7 14l-5-5 1.41-1.41L12 14.17l3.59-3.58L17 10l-5 5z"/>
-                </svg>
-                Calculate
-            </button>
-        </section>
-
-        <section class="section card tap-tempo-card" aria-labelledby="tap-section">
-            <h2 id="tap-section">Tap Tempo</h2>
-            <button id="tap-btn" class="regular-btn" aria-label="Tap to Set BPM">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                    <path d="M19 13H5c-1.1 0-2 .9-2 2v4h4c1.1 0 2-.9 2-2v-6h2v6c0 1.1.9 2 2 2h4v-4c0-1.1-.9-2-2-2zM7 19v-6h10v6H7z"/>
-                </svg>
-                Tap
-            </button>
-            <div class="tap-indicator">
-                <div class="tap-progress" id="tap-progress"></div>
-            </div>
-            <p id="tap-feedback" class="tap-feedback"></p>
-        </section>
-
-        <section class="section card kick-pulse-card" aria-labelledby="kick-pulse-section">
-            <h2 id="kick-pulse-section">Kick Pulse</h2>
-            <div class="input-group">
-                <label for="kick-pulse-toggle">Enable Kick Pulse:</label>
-                <label class="switch">
-                    <input type="checkbox" id="kick-pulse-toggle" aria-label="Enable/Disable Kick Pulse">
-                    <span class="slider round"></span>
-                </label>
-            </div>
-            <div class="input-group">
-                <label for="kick-delay-toggle">Enable Audio Delay:</label>
-                <label class="switch">
-                    <input type="checkbox" id="kick-delay-toggle" aria-label="Enable/Disable Audio Delay">
-                    <span class="slider round"></span>
-                </label>
-            </div>
-            <div class="input-group">
-                <label for="kick-subdivision-select">Subdivision:</label>
-                <select id="kick-subdivision-select" aria-label="Select Kick Pulse Subdivision">
-                    <option value="1">Quarter Note</option>
-                    <option value="0.5">Eighth Note</option>
-                    <option value="0.25">Sixteenth Note</option>
-                    <option value="0.75">Dotted Eighth Note</option>
-                </select>
-            </div>
-            <div class="input-group">
-                <label for="kick-gain-slider">Kick Volume:</label>
-                <input type="range" id="kick-gain-slider" min="0" max="1" step="0.01" value="0.8" aria-label="Control Kick Volume">
-            </div>
-            <div class="input-group">
-                <label for="delay-gain-slider">Delay Volume:</label>
-                <input type="range" id="delay-gain-slider" min="0" max="1" step="0.01" value="0.8" aria-label="Control Delay Volume">
-            </div>
-            <div class="input-group">
-                <label for="delay-feedback-slider">Delay Feedback:</label>
-                <input type="range" id="delay-feedback-slider" min="0" max="1" step="0.01" value="0" aria-label="Control Delay Feedback">
-            </div>
-            <div class="audio-indicator">
-                <div class="audio-progress" id="audio-progress"></div>
-            </div>
-        </section>
-
-        <section class="section card delay-suggestions-card" aria-labelledby="suggestions-section">
-            <h2 id="suggestions-section">Delay Time Suggestions</h2>
-            <table id="suggestions-table" aria-label="Delay Time Suggestions">
-                <thead>
-                    <tr>
-                        <th>Subdivision</th>
-                        <th>Delay (ms)</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Suggestions will be populated here -->
-                </tbody>
-            </table>
-            <button id="copy-btn" class="regular-btn" aria-label="Copy Delay Times to Clipboard">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h15c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h15v14z"/>
-                </svg>
-                Copy
-            </button>
-        </section>
-
-        <section class="section card custom-subdivisions-card" aria-labelledby="custom-subdivisions-section">
-            <h2 id="custom-subdivisions-section">Custom Subdivisions</h2>
-            <div class="input-group">
-                <label for="subdivision-name">Subdivision Name:</label>
-                <input type="text" id="subdivision-name" placeholder="e.g., Dotted Eighth" aria-required="true">
-            </div>
-            <div class="input-group">
-                <label for="subdivision-factor">Factor (relative to quarter note):</label>
-                <input type="number" id="subdivision-factor" placeholder="e.g., 1.5" step="0.1" min="0.1" aria-required="true">
-            </div>
-            <button id="add-subdivision-btn" class="regular-btn" aria-label="Add Custom Subdivision">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                    <path d="M19 13H5c-1.1 0-2 .9-2 2v4h4c1.1 0 2-.9 2-2v-6h2v6c0 1.1.9 2 2 2h4v-4c0-1.1-.9-2-2-2zM7 19v-6h10v6H7z"/>
-                </svg>
-                Add
-            </button>
-            <table id="custom-subdivisions-table" aria-label="Custom Subdivisions">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Factor</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Custom subdivisions will be listed here -->
-                </tbody>
-            </table>
-        </section>
-
-        <section class="section card sysex-output-card" aria-labelledby="sysex-output-section">
-            <h2 id="sysex-output-section">Sysex Output</h2>
-            <div class="input-group">
-                <label for="midi-output-select">MIDI Output Device:</label>
-                <select id="midi-output-select" aria-label="Select MIDI Output Device">
-                    <option value="">No MIDI Output</option>
-                </select>
-            </div>
-            <button id="send-sysex-btn" class="regular-btn" aria-label="Send Delay Sysex to Quadraverb">
-               <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-               </svg>
-              Send Delay
-           </button>
-            <div class="sysex-indicator">
-                <div class="sysex-progress" id="sysex-progress"></div>
-            </div>
-        </section>
-
-        <section class="section card sysex-parameter-card" aria-labelledby="sysex-parameter-section">
-            <h2 id="sysex-parameter-section">Sysex Parameters</h2>
-            <div class="input-group">
-                <label for="sysex-parameter-select">Parameter:</label>
-                <select id="sysex-parameter-select" aria-label="Select Sysex Parameter">
-                    <option value="leftDelay">Left Delay Time</option>
-                    <option value="reverbType">Reverb Type</option>
-                    <option value="lowEQFrequency">Low EQ Freq</option>
-                </select>
-            </div>
-            <div class="input-group">
-                <label for="sysex-parameter-value">Value:</label>
-                <input type="number" id="sysex-parameter-value" placeholder="Enter Parameter Value" aria-required="true">
-            </div>
-            <button id="send-sysex-parameter-btn" class="regular-btn" aria-label="Send Sysex Parameter">
-               <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-               </svg>
-              Send Parameter
-            </button>
-        </section>
-
-        <section class="section card presets-card" aria-labelledby="presets-section">
-            <h2 id="presets-section">Presets</h2>
-            <div class="input-group">
-                <label for="preset-name">Preset Name:</label>
-                <input type="text" id="preset-name" placeholder="Preset Name" aria-required="true">
-            </div>
-            <button id="save-preset-btn" class="regular-btn" aria-label="Save Current Settings as Preset">
-                <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                    <path d="M17 3H5c-1.1 0-2 .9-2 2v14l7-3 7 3V5c0-1.1-.9-2-2-2zm0 12l-5-2.14L7 15V5h10v10z"/>
-                </svg>
-                Save
-            </button>
-            <table id="presets-table" aria-label="Saved Presets">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>BPM</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Presets will be listed here -->
-                </tbody>
-            </table>
-        </section>
-
-        <div class="notification" id="notification" role="alert" aria-live="assertive"></div>
-
-        <button id="install-btn" class="regular-btn" style="display: none;" aria-label="Install App">
-            <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M12 2L8 6h3v6h2V6h3l-4-4zM5 18v-2h14v2H5z"/>
-            </svg>
-            Install
-        </button>
-
-        <div id="help-modal" class="modal" aria-hidden="true" role="dialog" aria-labelledby="help-modal-title" aria-describedby="help-modal-description">
-            <div class="modal-content">
-                <span class="close-button" id="close-help-modal" aria-label="Close Help">×</span>
-                <h2 id="help-modal-title">How to Use quadra.calc</h2>
-                <p id="help-modal-description">
-                    <ul>
-                        <li><strong>BPM Input:</strong> Enter the Beats Per Minute to calculate delay times.</li>
-                        <li><strong>Tap Tempo:</strong> Tap the button in rhythm to set BPM automatically.</li>
-                        <li><strong>Delay Time Suggestions:</strong> Click on any subdivision to copy its delay time in ms.</li>
-                        <li><strong>Custom Subdivisions:</strong> Add your own subdivisions for personalized delay settings.</li>
-                        <li><strong>Presets:</strong> Save and load your favorite delay configurations.</li>
-                        <li><strong>Theme Toggle:</strong> Switch between Light and Dark modes for better visibility.</li>
-                        <li><strong>MIDI Clock:</strong> Use an external MIDI clock as the BPM source.</li>
-                        <li><strong>Kick Pulse:</strong> Enable an audio kick pulse with configurable volume, delay, feedback, and subdivision.</li>
-                        <li><strong>Sysex Output:</strong> Configure and send parameters via MIDI Sysex to an external Alesis Quadraverb unit.</li>
-                        <li><strong>Install:</strong> Install quadra.calc as a Progressive Web App for offline access.</li>
-                    </ul>
-                </p>
-            </div>
-        </div>
-
-        <div id="delay-popup" class="delay-popup" aria-hidden="true" role="dialog" aria-labelledby="popup-content">
-            <div class="popup-content" id="popup-content"></div>
-        </div>
-    </main>
-
-    <footer class="app-footer">
-        <p>© 2024 quadra.calc. All rights reserved.</p>
-        <p>
-            <a href="https://github.com/your-repo" target="_blank" rel="noopener noreferrer">GitHub</a> |
-            <a href="mailto:contact@quadra.calc">Contact Us</a>
-        </p>
-    </footer>
-
+    <!-- Scripts -->
     <script type="module" src="scripts/main.js"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                .then(registration => {
-                    console.log('Service Worker registered with scope:', registration.scope);
-                })
-                .catch(error => {
-                    console.error('Service Worker registration failed:', error);
-                });
-            });
-        }
-    </script>
 </body>
 </html>

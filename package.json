@@ -1,21 +1,38 @@
 {
   "name": "quadra.sync",
   "version": "1.0.0",
-  "description": "sync.experiment",
-  "main": "sw.js",
+  "description": "Modern MIDI Delay Calculator for Alesis Quadraverb",
+  "type": "module",
+  "main": "scripts/main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "serve .",
+    "build": "rollup -c",
+    "dev": "rollup -c -w",
+    "lint": "eslint scripts/**/*.js",
+    "format": "prettier --write ."
   },
-  "keywords": [],
+  "keywords": [
+    "midi",
+    "delay",
+    "calculator",
+    "quadraverb",
+    "alesis"
+  ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "@babel/core": "^7.26.0",
     "@babel/preset-env": "^7.26.0",
+    "@rollup/plugin-node-resolve": "15.2.3",
+    "@rollup/plugin-terser": "0.4.4",
     "babel-jest": "^29.7.0",
-    "cross-env": "^7.0.3",
-    "eslint": "^9.17.0",
+    "eslint": "8.56.0",
+    "eslint-config-prettier": "9.1.0",
     "jest": "^29.7.0",
-    "jest-environment-jsdom": "^29.7.0"
+    "jest-environment-jsdom": "^29.7.0",
+    "prettier": "3.1.1",
+    "rollup": "4.9.1",
+    "serve": "14.2.1",
+    "string-width-cjs": "5.1.1"
   }
 }
